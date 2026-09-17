@@ -318,6 +318,39 @@ function normalizeMessages(
     })
   }
 
+  // Fork patch: OpenRouter suppresses DeepSeek reasoning on the wire when `reasoning_details` is present
+  // but empty, so DeepSeek's thinking mode rejects the tool-loop continuation (HTTP 400
+  // "reasoning_content in the thinking mode must be passed back to the API").
+  // `@openrouter/ai-sdk-provider` emits reasoning only when the details array is non-empty; OpenRouter
+  // streams plain `reasoning` for DeepSeek V4.1 Flash, so opencode stores `[]` and the text is dropped.
+  // Backfill from the reasoning text. `format: "unknown"` is required — a missing format defaults to
+  // `anthropic-claude-v1`, whose text details are filtered out unless they carry a signature.
+  if (model.api.npm === "@openrouter/ai-sdk-provider") {
+    msgs = msgs.map((msg) => {
+      if (msg.role !== "assistant" || !Array.isArray(msg.content)) return msg
+      return {
+        ...msg,
+        content: msg.content.map((part: any) => {
+          if (part.type !== "reasoning") return part
+          const text: string = typeof part.text === "string" ? part.text : ""
+          if (text.trim().length === 0) return part
+          const existing: unknown = part.providerOptions?.openrouter?.reasoning_details
+          if (Array.isArray(existing) && existing.length > 0) return part
+          return {
+            ...part,
+            providerOptions: {
+              ...part.providerOptions,
+              openrouter: {
+                ...part.providerOptions?.openrouter,
+                reasoning_details: [{ type: "reasoning.text", text, format: "unknown", index: 0 }],
+              },
+            },
+          }
+        }),
+      }
+    })
+  }
+
   if (
     typeof model.capabilities.interleaved === "object" &&
     model.capabilities.interleaved.field &&

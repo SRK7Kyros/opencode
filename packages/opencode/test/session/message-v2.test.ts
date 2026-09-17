@@ -1114,6 +1114,71 @@ describe("session.message-v2.toModelMessage", () => {
     ])
   })
 
+  test("backfills empty OpenRouter reasoning details from reasoning text", async () => {
+    const assistantID = "m-assistant"
+    const openrouterModel: Provider.Model = {
+      ...model,
+      id: ModelV2.ID.make("deepseek/deepseek-v4.1-flash"),
+      providerID: ProviderV2.ID.make("openrouter"),
+      api: {
+        id: "deepseek/deepseek-v4.1-flash",
+        url: "https://openrouter.ai/api/v1",
+        npm: "@openrouter/ai-sdk-provider",
+      },
+      capabilities: {
+        ...model.capabilities,
+        reasoning: true,
+        interleaved: false,
+      },
+    }
+    const input: SessionV1.WithParts[] = [
+      {
+        info: assistantInfo(assistantID, "m-parent", undefined, {
+          providerID: openrouterModel.providerID,
+          modelID: openrouterModel.id,
+        }),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "reasoning",
+            text: "thinking",
+            time: { start: 0 },
+            metadata: {
+              openrouter: {
+                reasoning_details: [],
+              },
+            },
+          },
+          {
+            ...basePart(assistantID, "a2"),
+            type: "text",
+            text: "answer",
+          },
+        ] as SessionV1.Part[],
+      },
+    ]
+
+    expect(
+      ProviderTransform.message(await MessageV2.toModelMessages(input, openrouterModel), openrouterModel, {}),
+    ).toStrictEqual([
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "reasoning",
+            text: "thinking",
+            providerOptions: {
+              openrouter: {
+                reasoning_details: [{ type: "reasoning.text", text: "thinking", format: "unknown", index: 0 }],
+              },
+            },
+          },
+          { type: "text", text: "answer" },
+        ],
+      },
+    ])
+  })
+
   test("splits assistant messages on step-start boundaries", async () => {
     const assistantID = "m-assistant"
 
