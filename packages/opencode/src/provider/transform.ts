@@ -360,7 +360,10 @@ function normalizeMessages(
     return msgs.map((msg) => {
       if (msg.role === "assistant" && Array.isArray(msg.content)) {
         const reasoningParts = msg.content.filter((part: any) => part.type === "reasoning")
-        const reasoningText = reasoningParts.map((part: any) => part.text).join("")
+        // Proxies sitting in front of this provider drop falsy values when they re-serialize a
+        // request, so an empty reasoning_content is silently stripped and the upstream then rejects
+        // the call for mixing messages with and without reasoning. Send a non-empty placeholder.
+        const reasoningText = reasoningParts.map((part: any) => part.text).join("") || " "
 
         // Filter out reasoning parts from content
         const filteredContent = msg.content.filter((part: any) => part.type !== "reasoning")
