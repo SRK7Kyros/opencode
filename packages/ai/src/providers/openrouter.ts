@@ -6,7 +6,7 @@ import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import { HttpOptions, ProviderID, type CacheHint, type ModelID, type OpenString } from "../schema/index.js"
 import type { ProviderPackage } from "../provider-package.js"
 import { SystemOne } from "../experimental/system-one.js"
-import { OpenAIChat } from "../protocols/openai-chat.js"
+import { OpenAIChat, requiresReasoning } from "../protocols/openai-chat.js"
 import { newBreakpoints, ttlBucket } from "../protocols/utils/cache.js"
 import { isRecord, ProviderShared } from "../protocols/shared.js"
 
@@ -103,6 +103,9 @@ export const protocol = Protocol.make({
       OpenAIChat.fromRequest(request, { cacheControl: cacheControl() }).pipe(
         Effect.map((body) => {
           const sourceAssistants = request.messages.filter((message) => message.role === "assistant")
+          // DeepSeek rejects a replayed turn whose reasoning was dropped, and OpenRouter
+          // carries replayed reasoning only through `reasoning_details`.
+          const requireReasoning = requiresReasoning(request.model)
           let assistantIndex = 0
           const messages = body.messages.map((message) => {
             if (message.role !== "assistant") return message
@@ -111,7 +114,14 @@ export const protocol = Protocol.make({
               .filter((part) => part.type === "reasoning")
               .map((part) => part.text)
               .join("")
-            const reasoningDetails = Array.isArray(message.reasoning_details) ? message.reasoning_details : undefined
+            const observedDetails = Array.isArray(message.reasoning_details) ? message.reasoning_details : undefined
+            // Synthesize one detail when none were observed. `format:"unknown"` is deliberate:
+            // a missing format defaults to `anthropic-claude-v1`, whose unsigned text details
+            // are filtered out.
+            const reasoningDetails =
+              requireReasoning && (!observedDetails || observedDetails.length === 0)
+                ? [{ type: "reasoning.text" as const, text: reasoning ?? "", format: "unknown" as const, index: 0 }]
+                : observedDetails
             return {
               ...message,
               reasoning_content: undefined,

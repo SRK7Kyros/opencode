@@ -34,6 +34,17 @@ const RESERVED_REASONING_FIELDS = new Set(["role", "content", "refusal", "tool_c
 export const DEFAULT_BASE_URL = "https://api.openai.com/v1"
 export const PATH = "/chat/completions"
 
+/**
+ * Whether a provider requires reasoning to be replayed back on assistant turns.
+ * DeepSeek thinking mode rejects a continuation whose reasoning was dropped.
+ */
+export const requiresReasoning = (model: LLMRequest["model"]) =>
+  model.compatibility?.requireReasoning ??
+  (model.compatibility?.reasoningField !== undefined ||
+    model.provider === "deepseek" ||
+    model.route.endpoint.baseURL?.toLowerCase().includes("deepseek.com") ||
+    model.id.toLowerCase().includes("deepseek"))
+
 // =============================================================================
 // Request Body Schema
 // =============================================================================
@@ -567,12 +578,7 @@ const lowerMessages = Effect.fn("OpenAIChat.lowerMessages")(function* (request: 
         : [{ role: "system", content: ProviderShared.joinText(request.system) }]
   const messages = [...system]
   const modelID = request.model.id.toLowerCase()
-  const requireReasoning =
-    request.model.compatibility?.requireReasoning ??
-    (request.model.compatibility?.reasoningField !== undefined ||
-      request.model.provider === "deepseek" ||
-      request.model.route.endpoint.baseURL?.toLowerCase().includes("deepseek.com") ||
-      modelID.includes("deepseek"))
+  const requireReasoning = requiresReasoning(request.model)
   const reasoningField = request.model.compatibility?.reasoningField
   const mistral = ["mistral", "devstral", "codestral", "pixtral", "mixtral"].some((family) => modelID.includes(family))
   const lowering = {

@@ -592,4 +592,122 @@ describe("OpenRouter", () => {
       ])
     }),
   )
+
+  // DeepSeek thinking mode rejects a replayed assistant turn whose reasoning was
+  // dropped. OpenRouter replays reasoning only through `reasoning_details`, so a
+  // DeepSeek-family model with no structured details must have them synthesized
+  // from the scalar reasoning text.
+  it.effect("backfills reasoning details for DeepSeek when none were observed", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: OpenRouter.configure({ apiKey: "test-key" }).model("deepseek/deepseek-v4.1-flash"),
+          cache: "none",
+          messages: [
+            Message.assistant({
+              type: "reasoning",
+              text: "Thinking",
+              providerMetadata: { openrouter: { reasoningField: "reasoning" } },
+            }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "assistant",
+          content: "",
+          reasoning: "Thinking",
+          reasoning_content: undefined,
+          reasoning_details: [{ type: "reasoning.text", text: "Thinking", format: "unknown", index: 0 }],
+          reasoning_text: undefined,
+        },
+      ])
+    }),
+  )
+
+  it.effect("backfills reasoning details for DeepSeek when the observed array is empty", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: OpenRouter.configure({ apiKey: "test-key" }).model("deepseek/deepseek-v4.1-flash"),
+          cache: "none",
+          messages: [
+            Message.assistant({
+              type: "reasoning",
+              text: "Thinking",
+              providerMetadata: { openrouter: { reasoningDetails: [] } },
+            }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "assistant",
+          content: "",
+          reasoning: "Thinking",
+          reasoning_content: undefined,
+          reasoning_details: [{ type: "reasoning.text", text: "Thinking", format: "unknown", index: 0 }],
+          reasoning_text: undefined,
+        },
+      ])
+    }),
+  )
+
+  it.effect("does not backfill when the model opts out of required reasoning", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: OpenRouter.route.model({
+            id: "deepseek/deepseek-v4.1-flash",
+            compatibility: { supportsPromptCacheKey: true, requireReasoning: false },
+          }),
+          cache: "none",
+          messages: [Message.assistant({ type: "reasoning", text: "Thinking" })],
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "assistant",
+          content: "",
+          reasoning: undefined,
+          reasoning_content: undefined,
+          reasoning_details: undefined,
+          reasoning_text: undefined,
+        },
+      ])
+    }),
+  )
+
+  it.effect("preserves observed reasoning details for a DeepSeek model", () =>
+    Effect.gen(function* () {
+      const details = [{ type: "reasoning.text", text: "Thinking", format: "unknown", index: 0 }]
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: OpenRouter.configure({ apiKey: "test-key" }).model("deepseek/deepseek-v4.1-flash"),
+          cache: "none",
+          messages: [
+            Message.assistant({
+              type: "reasoning",
+              text: "Thinking",
+              providerMetadata: { openrouter: { reasoningField: "reasoning", reasoningDetails: details } },
+            }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "assistant",
+          content: "",
+          reasoning: "Thinking",
+          reasoning_content: undefined,
+          reasoning_details: details,
+          reasoning_text: undefined,
+        },
+      ])
+    }),
+  )
 })
