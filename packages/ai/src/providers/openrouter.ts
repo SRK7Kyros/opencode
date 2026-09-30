@@ -8,7 +8,7 @@ import type { ProviderPackage } from "../provider-package.js"
 import { SystemOne } from "../protocols/system-one.js"
 import { OpenAIImages } from "../protocols/openai-images.js"
 import { MediaRoute } from "../route/media.js"
-import { OpenAIChat } from "../protocols/openai-chat.js"
+import { OpenAIChat, requiresReasoning } from "../protocols/openai-chat.js"
 import { cacheControl } from "../protocols/utils/cache.js"
 import { isRecord, JsonObject, lenient, ProviderShared } from "../protocols/shared.js"
 
@@ -127,7 +127,16 @@ export const protocol = Protocol.make({
             .filter((part) => part.type === "reasoning")
             .map((part) => part.text)
             .join("")
-          const reasoningDetails = Array.isArray(message.reasoning_details) ? message.reasoning_details : undefined
+          const observedDetails = Array.isArray(message.reasoning_details) ? message.reasoning_details : undefined
+          // DeepSeek rejects a replayed turn whose reasoning was dropped, and OpenRouter
+          // carries replayed reasoning only through `reasoning_details`. Synthesize one
+          // detail when none were observed. `format:"unknown"` is deliberate: a missing
+          // format defaults to `anthropic-claude-v1`, whose unsigned text details are
+          // filtered out.
+          const reasoningDetails =
+            requiresReasoning(request.model) && (observedDetails === undefined || observedDetails.length === 0)
+              ? [{ type: "reasoning.text" as const, text: reasoning ?? "", format: "unknown" as const, index: 0 }]
+              : observedDetails
           return {
             ...message,
             reasoning_content: undefined,
