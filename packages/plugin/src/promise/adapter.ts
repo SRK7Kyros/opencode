@@ -9,7 +9,7 @@ import { define } from "../effect/plugin.js"
 import type { ToolFailures, ToolHooks } from "../effect/tool.js"
 import { AssertInput } from "../permission.js"
 import type { Plugin } from "./plugin.js"
-import type { Info } from "./tool.js"
+import type { Info, ToolContext } from "./tool.js"
 import type { RpcDomain, RpcHandlers } from "./rpc.js"
 
 type HostRegistration = { readonly dispose: Effect.Effect<void> }
@@ -251,6 +251,21 @@ export function fromPromise(plugin: Plugin) {
           }))
 
         const run = <A, E>(effect: Effect.Effect<A, E>) => Effect.runPromiseWith(runtime)(effect)
+
+        // v1 plugin tools expect `ToolContext.ask` (see @opencode-ai/plugin tool.d.ts). Bridge it to
+        // the core permission service so legacy tools can still gate on user approval.
+        const askFor = (context: Tool.Context): ToolContext["ask"] => (input) =>
+          run(
+            host.permission.assert({
+              action: input.permission,
+              resources: input.patterns,
+              save: input.always,
+              sessionID: context.sessionID,
+              agent: context.agent,
+              metadata: input.metadata,
+              source: { type: "tool", messageID: context.messageID, id: context.id },
+            }),
+          )
 
         const promiseExecutor =
           (execute: Tool.Info["execute"]): Info["execute"] =>
@@ -501,7 +516,7 @@ export function fromPromise(plugin: Plugin) {
                     add: (tool: Info) =>
                       editor.add({
                         ...tool,
-                        execute: (input, context) => executePromiseTool(tool, input, context),
+                        execute: (input, context) => executePromiseTool(tool, input, context, askFor(context)),
                       }),
                     update: (id, update) =>
                       editor.update(id, (tool) => {
@@ -514,7 +529,7 @@ export function fromPromise(plugin: Plugin) {
                           output: value.output,
                           options: value.options,
                           execute: (input: Parameters<Info["execute"]>[0], context: Tool.Context) =>
-                            executePromiseTool(value, input, context),
+                            executePromiseTool(value, input, context, askFor(context)),
                         })
                       }),
                     remove: editor.remove,
@@ -667,12 +682,13 @@ const toolHook: {
   "execute.after": (run) => Effect.promise(run),
 }
 
-const executePromiseTool = (tool: Info, input: any, context: Tool.Context) =>
+const executePromiseTool = (tool: Info, input: any, context: Tool.Context, ask: ToolContext["ask"]) =>
   Effect.tryPromise({
     try: (signal) =>
       tool.execute(input, {
         ...context,
         signal,
+        ask,
         progress: (update) => Effect.runPromise(context.progress(update), { signal }),
       }),
     catch: toolError,
