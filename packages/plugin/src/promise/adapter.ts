@@ -671,6 +671,7 @@ export function fromPromise(plugin: Plugin) {
                 ),
               },
             },
+            messages: (input) => run(host.session.messages(input)),
           },
           shell: {
             hook: (name, callback) =>
