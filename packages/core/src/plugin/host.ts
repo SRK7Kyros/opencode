@@ -552,6 +552,9 @@ export const make = Effect.fn("PluginHost.make")(function* (
         }),
       get: (input) => sessions.get(input.sessionID),
       remove: (input) => sessions.remove(input.sessionID),
+      list: (input) =>
+        sessions.list(input).pipe(Effect.map((result) => ({ data: result.data, cursor: {} }))),
+      messages: (input) => sessions.messages(input),
       switchAgent: sessions.switchAgent,
       switchModel: sessions.switchModel,
       prompt: sessions.prompt,
