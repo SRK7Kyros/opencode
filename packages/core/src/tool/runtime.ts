@@ -42,7 +42,17 @@ export const execute = (tool: Tool.Info<any, any>, input: unknown, context: Tool
             }),
       ),
     )
+    // Tools without a declared output are not guaranteed to return the runtime's
+    // `{ output, content, metadata }` envelope: legacy/plugin tools bridge a raw value — a string,
+    // or v1's `{ title, output, metadata }` result — through `Effect.tryPromise`. A primitive must
+    // never reach an `in` probe below (it throws the opaque `"a is not an Object"`), and a value
+    // without `content` is not an envelope, so both are surfaced as text content.
+    const object = typeof result === "object" && result !== null
     if (tool.output === undefined) {
+      if (!object || !("content" in result)) {
+        const value = isRecord(result) && "output" in result ? (result.output ?? result.title ?? result) : result
+        return { output: undefined, content: normalizeContent(undefined, value) }
+      }
       if ("output" in result) return yield* Effect.die("Tool result declared output without an output schema")
       return {
         output: undefined,
@@ -50,15 +60,21 @@ export const execute = (tool: Tool.Info<any, any>, input: unknown, context: Tool
         ...(result.metadata === undefined ? {} : { metadata: result.metadata }),
       }
     }
-    if (!("output" in result)) return yield* new Tool.Error({ message: "Tool did not return its declared output" })
+    if (!object || !("output" in result))
+      return yield* new Tool.Error({ message: "Tool did not return its declared output" })
     const output = yield* encodeOutput(tool.output, result.output)
+    // A declared output schema may legitimately encode to `undefined` when the transformer's
+    // Type and Encoded forms differ (conditional schemas). `Effect` drops an `undefined`
+    // success value, so a downstream consumer that inspects `result.output` — Code Mode's
+    // per-call wrapper does `"output" in result` — receives nothing to inspect and dies with
+    // an unhelpful `"a is not an Object"`. An explicit null keeps the key present and is
+    // already what Code Mode maps to a null call result.
     return {
-      output,
+      output: output === undefined ? null : output,
       content: normalizeContent(result.content, output),
       ...(result.metadata === undefined ? {} : { metadata: result.metadata }),
     }
   })
-
 const decodeInput = (tool: Tool.Info<any, any>, value: unknown) =>
   Effect.gen(function* () {
     const result = yield* validateInput(tool.input, value)
