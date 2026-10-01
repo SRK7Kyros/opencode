@@ -1,9 +1,9 @@
 import type { PermissionApi } from "@opencode/client/effect/api"
+import type { Effect } from "effect"
 import type { Agent } from "@opencode/schema/agent"
 import type { Permission } from "@opencode/schema/permission"
 import type { Session } from "@opencode/schema/session"
 import type { Tool } from "@opencode/schema/tool"
-import type { Effect } from "effect"
 import type { AssertInput } from "../permission.js"
 import type { Hooks } from "./registration.js"
 

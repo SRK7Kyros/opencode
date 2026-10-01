@@ -8,6 +8,14 @@ import type { SessionMessage } from "@opencode/schema/session-message"
 import type { Types } from "effect"
 import type { Hooks, Transform } from "./registration.js"
 
+/** v1 permission gate. `metadata` is free-form context echoed alongside the prompt. */
+export interface AskInput {
+  readonly permission: string
+  readonly patterns: ReadonlyArray<string>
+  readonly always: ReadonlyArray<string>
+  readonly metadata: Record<string, unknown>
+}
+
 export interface ToolContext extends Omit<Tool.Context, "progress" | "cancel"> {
   /**
    * Aborted when the call is interrupted, and when the user stops the call if the tool has read this property.
@@ -17,6 +25,8 @@ export interface ToolContext extends Omit<Tool.Context, "progress" | "cancel"> {
    */
   readonly signal: AbortSignal
   readonly progress: (update: Tool.Metadata) => Promise<void>
+  /** Evaluate the permission rule and prompt the user when required; rejects when denied. */
+  readonly ask: (input: AskInput) => Promise<void>
 }
 
 export type Info<
