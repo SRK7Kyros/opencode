@@ -150,6 +150,17 @@ export interface SessionHooks {
   readonly retry: SessionRetry
 }
 
+export interface SessionMessagesInput {
+  readonly sessionID: Session.ID
+  readonly limit?: number
+  readonly order?: "asc" | "desc"
+  readonly type?: SessionMessage.Type
+  readonly cursor?: {
+    readonly id: SessionMessage.ID
+    readonly direction: "previous" | "next"
+  }
+}
+
 export type SessionDomain = Pick<
   SessionApi,
   | "create"
@@ -165,6 +176,12 @@ export type SessionDomain = Pick<
   | "move"
   | "wait"
   | "context"
+  | "list"
 > & {
+  /**
+   * Read a Session's durable message log. The v2 client API serves this from its
+   * own `message` group rather than `SessionApi`, so it is declared explicitly.
+   */
+  readonly messages: (input: SessionMessagesInput) => Promise<ReadonlyArray<SessionMessage.Info>>
   readonly hook: ModelHooks<SessionHooks>
 }

@@ -8,7 +8,7 @@ import type { SessionInbox } from "@opencode/schema/session-inbox"
 import type { SessionError } from "@opencode/schema/session-error"
 import type { SessionMessage } from "@opencode/schema/session-message"
 import type { TokenUsage } from "@opencode/schema/token-usage"
-import type { JsonSchema, Types } from "effect"
+import type { Effect, JsonSchema, Types } from "effect"
 import type { ModelHooks } from "./registration.js"
 
 export interface SessionPrompt {
@@ -150,6 +150,17 @@ export interface SessionHooks {
   readonly retry: SessionRetry
 }
 
+export interface SessionMessagesInput {
+  readonly sessionID: Session.ID
+  readonly limit?: number
+  readonly order?: "asc" | "desc"
+  readonly type?: SessionMessage.Type
+  readonly cursor?: {
+    readonly id: SessionMessage.ID
+    readonly direction: "previous" | "next"
+  }
+}
+
 export type SessionDomain = Pick<
   SessionApi<unknown>,
   | "create"
@@ -165,6 +176,12 @@ export type SessionDomain = Pick<
   | "move"
   | "wait"
   | "context"
+  | "list"
 > & {
+  /**
+   * Read a Session's durable message log. The v2 client API serves this from its
+   * own `message` group rather than `SessionApi`, so it is declared explicitly.
+   */
+  readonly messages: (input: SessionMessagesInput) => Effect.Effect<ReadonlyArray<SessionMessage.Info>, unknown>
   readonly hook: ModelHooks<SessionHooks>
 }

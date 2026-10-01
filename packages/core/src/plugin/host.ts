@@ -539,6 +539,9 @@ export const make = Effect.fn("PluginHost.make")(function* (
             input?.location ?? Location.Ref.make({ directory: location.directory, workspaceID: location.workspaceID }),
         }),
       get: (input) => sessions.get(input.sessionID),
+      list: (input) =>
+        sessions.list(input).pipe(Effect.map((result) => ({ data: result.data, cursor: {} }))),
+      messages: (input) => sessions.messages(input),
       switchAgent: sessions.switchAgent,
       switchModel: sessions.switchModel,
       prompt: sessions.prompt,
