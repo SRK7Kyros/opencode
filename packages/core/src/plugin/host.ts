@@ -431,6 +431,7 @@ export const make = Effect.fn("PluginHost.make")(function* (
                 : Effect.fail(new Error(`Permission request not found: ${input.requestID}`)),
             ),
           ),
+      assert: (input) => permission.assert(input),
     },
     plugin: {
       list: () => response(plugin.list()),
