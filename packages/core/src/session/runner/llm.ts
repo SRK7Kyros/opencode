@@ -186,6 +186,9 @@ const layer = Layer.effect(
       )
 
       while (true) {
+        // A plugin reload can start mid-turn and close the readiness Latch while slots rebuild, so
+        // re-validate activation before each step reads plugin-provided agent/context state.
+        yield* plugins.awaitActivation
         const next = yield* advanceToStep()
         if (next._tag !== "Ready") return next
         continuing = yield* runStep(next.context, step)
