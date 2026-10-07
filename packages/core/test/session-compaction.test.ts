@@ -349,6 +349,41 @@ const textUser = (text: string) =>
     time: { created: DateTime.makeUnsafe(0) },
   })
 
+it.effect("compaction bounds the recent text of a window that has no user message", () =>
+  Effect.gen(function* () {
+    const session = yield* insertSession(Session.ID.make("ses_recent_boundless"))
+    const checkpoint = SessionMessage.CompactionCompleted.make({
+      ...completedSummary("## Objective\n- earlier summary"),
+      metadata: { recent: "[Assistant]: earlier recent text" },
+    })
+    const assistant = (text: string) =>
+      Schema.decodeUnknownSync(SessionMessage.Assistant)({
+        id: SessionMessage.ID.create(),
+        type: "assistant",
+        agent: Agent.defaultID,
+        model: { id: "summary-model", providerID: "test" },
+        content: [{ type: "text", text }],
+        time: { created: 0, completed: 0 },
+      })
+    // Ten chunks of ~2,000 tokens each are ~20,000 tokens, over the 15,000 token allowance.
+    const messages = [
+      checkpoint,
+      ...Array.from({ length: 10 }, (_, index) => assistant(`chunk ${index} ${"x".repeat(7_992)}`)),
+    ]
+    yield* storeMessages(session.id, messages)
+
+    expect(yield* compactManually(session, messages)).toEqual({ status: "completed" })
+
+    const store = yield* SessionStore.Service
+    const [stored] = yield* store.context(session.id)
+    const recent = stored?.type === "compaction" && stored.status === "completed" ? (stored.metadata?.recent ?? "") : ""
+
+    // Without a user message to anchor on, the allowance decides: the oldest chunks are summarized rather
+    // than kept, because keeping the whole window would leave the summary nothing to shrink.
+    expect(recent).not.toContain("chunk 0")
+    expect(recent).toContain("chunk 9")
+  }),
+)
 test("compaction prompt requires the checkpoint headings in order", () => {
   const prompt = SessionCompaction.buildPrompt(false)
   expect(prompt.match(/^#{2,3} .+$/gm)).toEqual([
