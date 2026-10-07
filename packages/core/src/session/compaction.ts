@@ -720,6 +720,10 @@ const recentStart = (
   const latestUser = entries.findLastIndex((entry) => entry.message.type === "user")
   if (latestUser > 0) return latestUser
 
+  // The window can open mid-turn, with no user message to anchor on. Prefer the allowance-sized tail over
+  // the whole window: keeping everything leaves nothing for the summary to shrink.
+  if (dropped > 0) return dropped
+
   // One exchange, nothing older. Summarize it all and keep nothing, unless a previous summary already
   // kept recent text, in which case keep everything and summarize only the summary before it.
   return previous?.recent ? 0 : entries.length
